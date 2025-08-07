@@ -1,68 +1,88 @@
--- MM2 Role Revealer for Delta Executor
--- Version: 1.2 (Stealth Mode)
--- Features: Murderer/Deputy detection, console-only output
-
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
-local CurrentRound = 0
+local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
 
--- Stealth check function
-local function SafeCheck()
-    if not LocalPlayer.Character then return false end
-    if not LocalPlayer.Character:FindFirstChild("Humanoid") then return false end
-    if LocalPlayer.Character.Humanoid.Health <= 0 then return false end
-    return true
+-- Создаем интерфейс
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 200, 0, 50)
+Frame.Position = UDim2.new(0.5, -100, 0, 10)
+Frame.BackgroundTransparency = 0.5
+Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Frame.Parent = ScreenGui
+
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0.9, 0, 0.8, 0)
+Button.Position = UDim2.new(0.05, 0, 0.1, 0)
+Button.Text = "Показать роли"
+Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+Button.Parent = Frame
+
+-- Для хранения подсветок
+local Highlights = {}
+
+-- Функция создания подсветки
+local function CreateHighlight(player, color)
+    if not player.Character then return end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "RoleHighlight"
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.Parent = player.Character
+    Highlights[player] = highlight
 end
 
--- Advanced role detection
-local function GetRoles()
-    if not SafeCheck() then return end
-    
-    -- Method 1: Check for role tags (new MM2 update)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            -- Check for Murderer tag
-            if player:FindFirstChild("MurdererTag") or player:GetAttribute("IsMurderer") then
-                print("[Delta] "..player.Name.." → 🔪 Murderer (Tag System)")
-            
-            -- Check for Sheriff/Deputy tag
-            elseif player:FindFirstChild("SheriffTag") or player:GetAttribute("IsSheriff") then
-                print("[Delta] "..player.Name.." → 👮 Deputy (Tag System)")
-            end
-        end
+-- Функция удаления подсветок
+local function ClearHighlights()
+    for _, highlight in pairs(Highlights) do
+        highlight:Destroy()
     end
+    Highlights = {}
+end
 
-    -- Method 2: Weapon detection (fallback)
+-- Основная функция
+Button.MouseButton1Click:Connect(function()
+    ClearHighlights()
+    
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            local char = player.Character
-            -- Knife detection (Murderer)
-            if char:FindFirstChildOfClass("Tool") and char:FindFirstChildOfClass("Tool").Name:lower():find("knife") then
-                print("[Delta] "..player.Name.." → 🔪 Murderer (Weapon Scan)")
-            -- Gun detection (Deputy)
-            elseif char:FindFirstChild("Gun") or char:FindFirstChild("Revolver") then
-                print("[Delta] "..player.Name.." → 👮 Deputy (Weapon Scan)")
+            -- Проверка на убийцу
+            if player:GetAttribute("Murderer") or player.Character:FindFirstChild("Knife") then
+                CreateHighlight(player, Color3.fromRGB(255, 0, 0)) -- Красный
+                print("Найден убийца: " .. player.Name)
+            
+            -- Проверка на шерифа
+            elseif player:GetAttribute("Sheriff") or player.Character:FindFirstChild("Gun") then
+                CreateHighlight(player, Color3.fromRGB(0, 0, 255)) -- Синий
+                print("Найден шериф: " .. player.Name)
             end
         end
     end
-end
+    
+    -- Автоматическое удаление через 10 секунд
+    task.delay(10, ClearHighlights)
+end)
 
--- Anti-detection measures
-local RandomDelay = math.random(8, 15)
-local SafeMode = true  -- Set to false for faster updates (riskier)
+-- Обновление подсветок при изменении персонажей
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        if Highlights[player] then
+            CreateHighlight(player, Highlights[player].FillColor)
+        end
+    end)
+end)
 
--- Main loop
-while wait(RandomDelay) do
-    if SafeMode and math.random(1, 3) == 1 then  -- Random skip some checks
-        RandomDelay = math.random(8, 15)
-        continue
+-- Удаление при выходе игрока
+Players.PlayerRemoving:Connect(function(player)
+    if Highlights[player] then
+        Highlights[player]:Destroy()
+        Highlights[player] = nil
     end
-    
-    pcall(GetRoles)
-    
-    -- Small delay variation to avoid pattern detection
-    RandomDelay = SafeMode and math.random(8, 15) or math.random(4, 8)
-end
-
-print("[Delta] MM2 Role Detector Activated (Stealth Mode)")
+end)
